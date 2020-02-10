@@ -1,0 +1,255 @@
+---
+title: "streetmaps_almelo"
+author: "Jordy van Langen"
+date: '`r format(Sys.time(), "%B %d, %Y")`'
+output:
+  pdf_document: default
+  html_document: default
+urlcolor: blue
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 1. R-version check
+```{r check R version, echo = TRUE}
+R.version$version.string
+```
+
+### 2. Loading libraries
+
+- Create an R chunk that loads all the libraries you are using.
+```{r load libraries, message = FALSE}
+library("tidyverse") #Version 1.3.0
+library("osmdata") #Version 0.1.2
+```
+
+### 3. Create the maps
+```{r}
+#available_tags("highway")
+#available_features
+```
+
+
+```{r, echo = TRUE}
+city_coords <-getbb("Almelo The Netherlands")
+```
+
+Now that we know the coordinates, we can export the roads from the coordinate system. To do this, we must first pass the output of the getbb function to the opq function. To be honest, I'm not so sure what the function does, but we need it. Next, we transfer this output to the function add_osm_feature. The function has two arguments. With key we specify the key of the feature, with value we specify the tag of the feature. In our case, we first extract all major streets of the city of Freiburg from the dataset. Finally we transfer the output into the function osmdata_sf to insert it later into ggplot2.
+
+```{r}
+streets <- getbb("Almelo The Netherlands") %>%
+  opq()%>%
+  add_osm_feature(key = "highway",
+                  value = c("motorway", "primary",
+                            "secondary", "tertiary")) %>%
+  osmdata_sf()
+#streets
+
+```
+The data from the database is now stored in the streets variable. This object has different child objects. Later osm_lines are especially interesting for us. osm_points are more interesting for places. The function add_osm_feature is much more powerful than described here. If you want to learn more about it, see the official documentation of the package. There you'll find, for example, how to nest several questions together. For example, where are all the Irish pubs in a city?
+
+Next we get the smaller streets and the main river from the database:
+
+```{r}
+small_streets <- getbb("Almelo The Netherlands") %>%
+  opq()%>%
+  add_osm_feature(key = "highway",
+                  value = c("residential", "living_street",
+                            "unclassified",
+                            "service", "footway", "trunk", "road", "path")) %>%
+  osmdata_sf()
+```
+
+```{r}
+river <- getbb("Almelo The Netherlands") %>%
+  opq()%>%
+  add_osm_feature(key = "waterway", value = "river") %>%
+  osmdata_sf()
+```
+
+```{r}
+water <- getbb("Almelo The Netherlands") %>%
+  opq()%>%
+  add_osm_feature(key = "natural", value = "water")%>%
+  osmdata_sf()
+```
+
+Let's create our first streetmap:
+
+```{r}
+ggplot() +
+  geom_sf(data = streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "black",
+          size = .4,
+          alpha = .8) +
+  coord_sf(xlim = c(6.597705,  6.721168),
+           ylim = c(52.315066, 52.399123),
+           expand = FALSE)
+```
+First, we add the geom geom_sf to the function ggplot. For data we add the streets stored in the variable streets$osm_lines. We can determine the width of the streets with size. At the same time I don't want to make the streets totally black, so I make them a bit transparent by changing the alpha level. With the function coord_sf I can determine the x- and y-axis exactly. It is best to play around with the values until you have defined the right limits for yourself. With expand = FALSE you make sure that the coordinates are displayed exactly.
+
+Next, let's add the small streets and our river:
+
+```{r}
+ggplot() +
+  geom_sf(data = streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "grey",
+          size = .2,
+          alpha = .2) +
+  geom_sf(data = small_streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "grey",
+          size = .1,
+          alpha = .1) +
+  geom_sf(data = water$osm_polygons,
+          inherit.aes = FALSE,
+          color = "blue",
+          size = .4,
+          alpha = .8)+
+  geom_sf(data = water$osm_multipolygons,
+          inherit.aes = FALSE,
+          fill = "blue", #405a63",
+          size = .4,
+          alpha = .8) +
+  coord_sf(xlim = c(city_coords[1],city_coords[3]), 
+            ylim = c(city_coords[2],city_coords[4]),
+           expand = FALSE) +
+    theme_void() #+
+  
+  
+  
+  
+  #coord_sf(xlim = c(6.597705,  6.721168),
+      #     ylim = c(52.315066, 52.399123),
+      #     expand = FALSE) +
+  #theme_void()
+  #theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  #theme(axis.line=element_blank(),
+  #    axis.text.x=element_blank(),
+  #    axis.text.y=element_blank(),
+  #    axis.ticks=element_blank())
+  #ggsave("almelo_grey.tiff", height=6, width=6, units='in', dpi=600)
+```
+
+There's one more thing that's disturbing, though. The x- and y-axis. To remove them we can add the function theme_void():
+
+```{r}
+ggplot() +
+  geom_sf(data = water$osm_polygons,  
+          inherit.aes = FALSE,
+          color = "blue", #405a63",
+          size = .4,
+          alpha = .8) +
+  geom_sf(data = water$osm_multipolygons,
+          inherit.aes = FALSE,
+          color = "blue", #405a63",
+          size = .4,
+          alpha = .8) +
+  geom_sf(data = streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "black",
+          size = .2,
+          alpha = .2) +
+  geom_sf(data = small_streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "black", #"#ffbe7f",
+          size = .1,
+          alpha = .1) +
+  #if you use coord_sf() with polygons falling partly outside of the boundaries, these will not be plotted.
+  coord_sf(xlim = c(city_coords[1],city_coords[3]), 
+            ylim = c(city_coords[2],city_coords[4]),
+           expand = FALSE) +
+  theme_void() #+
+  #theme(
+  #  plot.background = element_rect(fill = "#282828")
+  #)
+
+#save a png
+ggsave("almelo_water.png", width = 8, height = 12)
+#ggsave("almelo_water.tiff", height=6, width=6, units='in', dpi=600)
+
+```
+Next, we can adjust the colors of the visualization. I want to create not only a white streetmap, but also one with a dark background:
+
+```{r}
+ggplot() +
+  geom_sf(data = streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "black",
+          size = .2,
+          alpha = .2) +
+  geom_sf(data = small_streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "black", #"#ffbe7f",
+          size = .1,
+          alpha = .1) +
+  geom_sf(data = water$osm_polygons,  
+          inherit.aes = FALSE,
+          color = "#405a63", #405a63",
+          size = .2,
+          alpha = .8) +
+  geom_sf(data = water$osm_polygons,  
+          inherit.aes = FALSE,
+          fill = "#405a63", #405a63",
+          size = .4,
+          alpha = .8) +
+  geom_sf(data = water$osm_multipolygons,
+          inherit.aes = FALSE,
+          fill = "#405a63", #405a63",
+          size = .4,
+          alpha = .8) +
+    geom_sf(data = water$osm_multipolygons,
+          inherit.aes = FALSE,
+          color = "#405a63", #405a63",
+          size = .2,
+          alpha = .8) +
+  #if you use coord_sf() with polygons falling partly outside of the boundaries, these will not be plotted.
+  coord_sf(xlim = c(city_coords[1],city_coords[3]), 
+            ylim = c(city_coords[2],city_coords[4]),
+           expand = FALSE) +
+  theme_void() #+
+
+ggsave("almelo_water.tiff", height=6, width=6, units='in', dpi=600)
+
+```
+
+Now that we've created both visualizations, we can make a poster out of it. To do so I first exported the visualizations as a png file. Make sure that you execute the function right after you have created your streetmap.
+
+Next, I created a Powerpoint file and resized it. Then I imported the png file and enlarged it. You might also need to crop the png first. As text I used the font Lato. I recommend that you search the internet for photos of streetmaps and use these examples as a guide. There are already countless beautiful designs that you can recreate relatively easily in Powerpoint.
+
+```{r}
+ggplot() +
+  geom_sf(data = water$osm_polygons,  
+          inherit.aes = FALSE,
+          fill= "#405a63",
+          size = .7,
+          alpha = .8) +
+  geom_sf(data = water$osm_multipolygons,
+          inherit.aes = FALSE,
+          fill= "#405a63",
+          size = .7,
+          alpha = .8) +
+  geom_sf(data = streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "grey",
+          size = .2,
+          alpha = .2) +
+  geom_sf(data = small_streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "#ffbe7f",
+          size = .1,
+          alpha = .1) +
+  coord_sf(xlim = c(city_coords[1],city_coords[3]), 
+            ylim = c(city_coords[2],city_coords[4]),
+           expand = FALSE) +
+  theme_void() +
+    theme(
+    plot.background = element_rect(fill = "#282828")
+  )
+
+ ggsave("almelo_dark.tiff", height=6, width=6, units='in', dpi=600)
+```
+
